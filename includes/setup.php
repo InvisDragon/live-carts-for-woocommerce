@@ -4,7 +4,7 @@ namespace Penthouse\LiveCarts;
 defined('ABSPATH') || exit;
 
 class Setup {
-	
+
 	static function createDatabaseTables() {
 		global $wpdb;
 		$sql = [
@@ -16,6 +16,8 @@ class Setup {
 			  last_seen datetime NOT NULL,
 			  status varchar(24) NOT NULL,
 			  ip_address varchar(39) NOT NULL,
+			  user_agent varchar(300) NULL,
+			  email varchar(150) NULL,
 			  value double(12,2) NOT NULL,
 			  archived tinyint(1) NOT NULL
 			)',
@@ -25,10 +27,10 @@ class Setup {
 			  contents varchar(2048) NOT NULL
 			)',
 		];
-		
+
 		array_map([$wpdb, 'query'], $sql);
 	}
-	
+
 	static function upgradeDatabaseTables($fromVersion) {
 		global $wpdb;
 		$sql = [
@@ -38,9 +40,12 @@ class Setup {
 			'1.0.11' => [
 				'ALTER TABLE '.$wpdb->prefix.'phplugins_cart_contents DROP PRIMARY KEY',
 				'ALTER TABLE '.$wpdb->prefix.'phplugins_cart_contents ADD FOREIGN KEY key_cart_id (cart_id) REFERENCES '.$wpdb->prefix.'phplugins_carts (cart_id)'
-			]
+			],
+			'1.0.12' => [
+				'ALTER TABLE '.$wpdb->prefix.'phplugins_carts ADD user_agent varchar(300) NULL AFTER value, ADD email varchar(150) NULL AFTER ip_address'
+			],
 		];
-		
+
 		foreach ($sql as $sqlFromVersion => $versionSql) {
 			if (version_compare($fromVersion, $sqlFromVersion) == 1) {
 				break;

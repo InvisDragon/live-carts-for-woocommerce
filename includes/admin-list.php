@@ -22,7 +22,7 @@ class CartsListTable extends \WP_List_Table {
 		}
 		return $views;
 	}
-	
+
 	public function get_columns() {
 		return [
 			'cart_id' => esc_html__('Cart ID', 'live-carts-for-woocommerce'),
@@ -45,7 +45,7 @@ class CartsListTable extends \WP_List_Table {
 				.(empty($_REQUEST['s']) ? '' : ' AND cart_id=%s').'
 				ORDER BY last_seen DESC
 				LIMIT %d,%d';
-		
+
 		$params = $filterStatus ? [ sanitize_key($_REQUEST['status']) ] : [];
 		if (!empty($_REQUEST['s'])) {
 			$params[] = LiveCarts::unformatCartId(sanitize_text_field($_REQUEST['s']));
@@ -54,10 +54,10 @@ class CartsListTable extends \WP_List_Table {
 		$params[] = $perPage;
 
 		array_unshift($params, $sql);
-	
+
 		$query = call_user_func_array([$wpdb, 'prepare'], $params);
 		$this->items = $wpdb->get_results($query, ARRAY_A);
-	
+
 		$count = $wpdb->get_var('SELECT COUNT(*) FROM '.$wpdb->prefix.'phplugins_carts WHERE archived=0');
 		$this->set_pagination_args([
 			'total_items' => (int) $count,
@@ -81,7 +81,7 @@ class CartsListTable extends \WP_List_Table {
 					)
 				.'</td>';
 	}
-	
+
 	protected function column_last_seen($row) {
 		return $row['last_url']
 					? sprintf(
@@ -92,11 +92,11 @@ class CartsListTable extends \WP_List_Table {
 					)
 					: esc_html(get_date_from_gmt($row['last_seen'], LiveCarts::instance()->getTimestampFormat()));
 	}
-	
+
 	protected function column_coupon($row) {
 		return esc_html($row['coupon']);
 	}
-	
+
 	protected function column_user($row) {
 		if ($row['user_id']) {
 			$user = get_userdata($row['user_id']);
@@ -107,7 +107,14 @@ class CartsListTable extends \WP_List_Table {
 				}
 			}
 		}
-		return empty($user) ? esc_html_e('Guest/Unknown', 'live-carts-for-woocommerce') : '<a href="'.esc_url(get_edit_profile_url($user->ID)).'" target="_blank">'.esc_html($userDisplayName).'</a>';
+		if(empty($user)) {
+			if($row['email']) {
+				return esc_html($row['email']);
+			} else {
+				return esc_html_e('Guest/Unknown', 'live-carts-for-woocommerce');
+			}
+		}
+		return '<a href="'.esc_url(get_edit_profile_url($user->ID)).'" target="_blank">'.esc_html($userDisplayName).'</a>';
 	}
 
 	protected function column_value($row) {

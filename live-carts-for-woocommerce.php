@@ -1,7 +1,7 @@
 <?php
 /*
 Plugin Name: Live Carts for WooCommerce
-Version: 1.0.11
+Version: 1.0.12
 Description: Monitor your customers' current and past WooCommerce shopping carts via the WordPress admin.
 License: GNU General Public License version 3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -12,7 +12,15 @@ Text Domain: live-carts-for-woocommerce
 namespace Penthouse\LiveCarts;
 
 class LiveCarts {
-	const VERSION = '1.0.11', CART_ABANDON_TIME = 7200, CART_ARCHIVE_DAYS = 30, ADMIN_CAPABILITY = 'manage_woocommerce';
+	const VERSION = '1.0.12';
+	const CART_ABANDON_TIME = 7200;
+	const CART_ARCHIVE_DAYS = 30;
+	const ADMIN_CAPABILITY = 'manage_woocommerce';
+	const SKIP_USER_AGENTS = [
+		'GoogleBot',
+		'Bingbot',
+		'YandexBot',
+	];
 
 	private $currentCart, $currentCartId;
 	private static $instance;
@@ -37,7 +45,7 @@ class LiveCarts {
 
 		add_action('woocommerce_order_status_changed', [$this, 'onOrderStatusChanged'], 10, 4);
 		add_action('admin_enqueue_scripts', [$this, 'adminScripts']);
-		
+
 		add_action('rest_api_init', function() {
 			require_once(__DIR__.'/includes/stats-controller.php');
 			StatsController::register();
@@ -47,35 +55,44 @@ class LiveCarts {
 			require_once(__DIR__.'/includes/analytics.php');
 			new Analytics();
 		}
-		
-		$lastSeenVersion = get_option('phplugins_carts_version', '1.0.5');
+
+		$lastSeenVersion = get_option('phplugins_carts_version', '1.0.12');
 		if ($lastSeenVersion !== self::VERSION) {
 			add_action('init', [$this, 'handleVersionUpgrade'], 1);
 		}
-		
+
 		// Improve compatibility with woocommerce-paypal-payments plugin
 		add_action('wc_ajax_ppc-simulate-cart', [$this, 'disableCartProcessing'], 1);
+
+		// Skip for bots
+		$user_agent = strval(@$_SERVER['HTTP_USER_AGENT']);
+		foreach(static::SKIP_USER_AGENTS as $skip) {
+			if(stripos($user_agent, $skip) !== false) {
+				$this->disableCartProcessing();
+				break;
+			}
+		}
 	}
-	
+
 	public function handleVersionUpgrade() {
 		global $wpdb;
 		$allTables = $wpdb->get_col('SHOW TABLES');
 		if (in_array($wpdb->prefix.'phplugins_carts', $allTables)) {
 			require_once(__DIR__.'/includes/setup.php');
-			Setup::upgradeDatabaseTables( get_option('phplugins_carts_version', '1.0.5') );
+			Setup::upgradeDatabaseTables( get_option('phplugins_carts_version', '1.0.12') );
 			update_option('phplugins_carts_version', self::VERSION);
 		}
 	}
-	
+
 	public function addCartIdDisplayClass($classes) {
 		$classes[] = 'phplugins-live-carts-show-id';
 		return $classes;
 	}
-	
+
 	public function outputCartId() {
 		echo( $this->getCartIdFrontendDisplay() );
 	}
-	
+
 	public function getCartIdFrontendDisplay($before='') {
 		return $before.apply_filters('phplugins_live_carts_frontend_cart_id_html',
 			'<div class="phplugins-live-carts-cart-id">
@@ -83,27 +100,27 @@ class LiveCarts {
 				<span>'.self::formatCartId($this->currentCartId).'</span>
 			</div>', $this->currentCartId);
 	}
-	
+
 	public static function formatCartId($cartId) {
 		// Formatted cart IDs MUST be HTML-safe!
 		return str_pad( strtoupper(dechex($cartId)), 8, '0', STR_PAD_LEFT );
 	}
-	
+
 	public static function unformatCartId($cartId) {
 		return hexdec($cartId);
 	}
-	
+
 	public function disableCartProcessing() {
 		remove_action('woocommerce_cart_loaded_from_session', [$this, 'onCartLoaded']);
 		remove_action('woocommerce_after_calculate_totals', [$this, 'updateCartContents']);
 	}
-	
+
 	public function saveSettings() {
 		global $wpdb;
-		
+
 		if (current_user_can(self::ADMIN_CAPABILITY)) {
 			check_admin_referer('phplugins-carts-settings-save', 'phplugins_carts_settings_save');
-			
+
 			if (empty($_POST['phplugins_carts_debug'])) {
 				$log = get_option('phplugins_carts_debug');
 				if ($log) {
@@ -113,21 +130,21 @@ class LiveCarts {
 			} else {
 				update_option('phplugins_carts_debug', sanitize_key(wp_generate_password(20, false)), false);
 			}
-			
+
 			if (empty($_POST['phplugins_carts_no_ip'])) {
 				delete_option('phplugins_carts_no_ip');
 			} else {
 				$wpdb->query('UPDATE '.$wpdb->prefix.'phplugins_carts SET ip_address=""');
 				update_option('phplugins_carts_no_ip', 1);
 			}
-			
+
 			if (empty($_POST['phplugins_carts_no_url'])) {
 				delete_option('phplugins_carts_no_url');
 			} else {
 				$wpdb->query('UPDATE '.$wpdb->prefix.'phplugins_carts SET last_url=""');
 				update_option('phplugins_carts_no_url', 1);
 			}
-			
+
 			if (empty($_POST['phplugins_carts_show_id'])) {
 				delete_option('phplugins_carts_show_id');
 			} else {
@@ -135,7 +152,7 @@ class LiveCarts {
 			}
 		}
 	}
-	
+
 	public function adminScripts() {
 		$currentScreen = get_current_screen();
 		if ($currentScreen && ($currentScreen->id == 'woocommerce_page_live-carts-for-woocommerce' || $currentScreen->id == 'woocommerce_page_wc-admin')) {
@@ -144,11 +161,11 @@ class LiveCarts {
 			wp_enqueue_style('phplugins-live-carts-admin', plugins_url('assets/css/admin.css', __FILE__), null, self::VERSION);
 		}
 	}
-	
+
 	public function frontendScripts() {
 		wp_enqueue_style('phplugins-live-carts', plugins_url('assets/css/frontend.css', __FILE__), null, self::VERSION);
 	}
-	
+
 	public function debugLog($message, $file, $line) {
 		try {
 			$log = get_option('phplugins_carts_debug');
@@ -178,7 +195,7 @@ class LiveCarts {
 				);
 				do_action('phplugins_live_carts_cart_converted', $this->currentCartId);
 			}
-		
+
 		} catch (\Exception $ex) {
 			$this->debugLog($ex->getMessage(), __FILE__, __LINE__);
 		} catch (\Error $err) {
@@ -202,7 +219,7 @@ class LiveCarts {
 			new AdminPage();
 		}
 	}
-	
+
 	public function onAdminMenu() {
 		add_submenu_page('woocommerce', __('Live Carts for WooCommerce', 'live-carts-for-woocommerce'), __('Live Carts', 'live-carts-for-woocommerce'), self::ADMIN_CAPABILITY, 'live-carts-for-woocommerce', '__return_empty_string');
 	}
@@ -231,9 +248,9 @@ class LiveCarts {
 					return;
 				}
 			}
-			
+
 			add_action('wp_footer', [$this, 'cartSeen']);
-		
+
 			if ( get_option('phplugins_carts_show_id') ) {
 				add_action('woocommerce_after_cart_table', [$this, 'outputCartId']);
 				add_filter('render_block_woocommerce/cart', [$this, 'getCartIdFrontendDisplay']);
@@ -260,7 +277,7 @@ class LiveCarts {
 
 	public function createNewCart($cart) {
 		global $wpdb;
-		
+
 		do {
 			$cartId = random_int(1, hexdec('FFFFFFFF'));
 			$foundCartId = $wpdb->get_col('SELECT cart_id FROM '.$wpdb->prefix.'phplugins_carts WHERE cart_id='.((int) $cartId));
@@ -273,48 +290,56 @@ class LiveCarts {
 				'user_id' => get_current_user_id(),
 				'created' => current_time('mysql', true),
 				'ip_address' => get_option('phplugins_carts_no_ip') ? '' : apply_filters('phplugins_live_carts_cart_ip_address', sanitize_text_field($_SERVER['REMOTE_ADDR'])),
-				'status' => 'active'
+				'status' => 'active',
+				'user_agent' => substr( strval(@$_SERVER['HTTP_USER_AGENT']), 0, 300 ),
+				'email' => WC()->customer ? WC()->customer->get_email() : '',
 			],
 			[
 				'cart_id' => '%d',
 				'user_id' => '%d',
 				'created' => '%s',
 				'ip_address' => '%s',
-				'status' => '%s'
+				'status' => '%s',
+				'user_agent' => '%s',
+				'email' => '%s',
 			]
 		);
-		
+
 		if (!$result) {
 			throw new \Exception( __('Cart could not be created', 'live-carts-for-woocommerce') );
 		}
-		
+
 		$this->currentCartId = $cartId;
 		WC()->session->set( 'phplugins_cart_id', $this->currentCartId );
-		
+
 		do_action('phplugins_live_carts_cart_created', $cartId);
 	}
 
 	public function cartSeen() {
 		global $wpdb;
-		
+
 		try {
 			$updateValues = [
 				'last_seen' => current_time('mysql', true),
 				'status' => 'active',
-				'archived' => 0
+				'archived' => 0,
+				'user_agent' => substr( strval(@$_SERVER['HTTP_USER_AGENT']), 0, 300 ),
+				'email' => WC()->customer ? WC()->customer->get_email() : '',
 			];
-		
+
 			$updateFormats = [
 				'last_seen' => '%s',
 				'status' => '%s',
-				'archived' => '%d'
+				'archived' => '%d',
+				'user_agent' => '%s',
+				'email' => '%s',
 			];
-			
+
 			if (!get_option('phplugins_carts_no_url') && !is_404() && !is_admin()) {
 				$updateValues['last_url'] = add_query_arg([]);
 				$updateFormats['last_url'] = '%s';
 			}
-			
+
 			$result = $wpdb->update(
 				$wpdb->prefix.'phplugins_carts',
 				$updateValues,
@@ -322,7 +347,7 @@ class LiveCarts {
 				$updateFormats,
 				[ 'cart_id' => '%d' ]
 			);
-			
+
 			do_action('phplugins_live_carts_cart_seen', $this->currentCartId);
 
 			if ($result === false) {
@@ -332,10 +357,10 @@ class LiveCarts {
 			$this->debugLog($ex->getMessage(), __FILE__, __LINE__);
 		}
 	}
-	
+
 	public function updateCartContents() {
 		global $wpdb;
-		
+
 		try {
 			if (empty($this->currentCartId)) {
 				try {
@@ -346,7 +371,7 @@ class LiveCarts {
 					return;
 				}
 			}
-			
+
 			$result = $wpdb->update(
 				$wpdb->prefix.'phplugins_carts',
 				[
@@ -360,14 +385,14 @@ class LiveCarts {
 				],
 				[ 'cart_id' => '%d' ]
 			);
-			
+
 			if ($result === false) {
 				throw new \Exception( __('Cart could not be updated', 'live-carts-for-woocommerce') );
 			}
 
 			$currentContents = wp_json_encode($this->currentCart->get_cart_contents());
 			$lastContents = $wpdb->get_var( $wpdb->prepare('SELECT contents FROM '.$wpdb->prefix.'phplugins_cart_contents WHERE cart_id=%d ORDER BY ts DESC LIMIT 1', $this->currentCartId) );
-			
+
 			if ($lastContents !== $currentContents) {
 				$result = $wpdb->insert(
 					$wpdb->prefix.'phplugins_cart_contents',
@@ -386,7 +411,7 @@ class LiveCarts {
 				if ($result === false) {
 					throw new \Exception( __('Cart contents could not be updated', 'live-carts-for-woocommerce') );
 				}
-				
+
 				do_action('phplugins_live_carts_cart_contents_updated', $this->currentCartId);
 			}
 		} catch (\Exception $ex) {

@@ -9,7 +9,7 @@ class AdminPage {
 
 	function __construct() {
 		add_action(get_plugin_page_hookname('live-carts-for-woocommerce', 'woocommerce'), [$this, isset($_GET['cart_id']) ? 'cartPage' : (isset($_GET['settings']) ? 'settingsPage' : 'listPage')]);
-		
+
 		if (isset($_GET['cart_id'])) {
 			global $wpdb;
 			$this->cartData = $wpdb->get_row( $wpdb->prepare('SELECT * FROM '.$wpdb->prefix.'phplugins_carts LEFT JOIN '.$wpdb->prefix.'phplugins_cart_contents cc USING (cart_id) WHERE cart_id=%d ORDER BY cc.ts DESC LIMIT 1', (int) $_GET['cart_id']) );
@@ -46,7 +46,7 @@ class AdminPage {
 	<h1><?php esc_html_e('Live Carts Settings', 'live-carts-for-woocommerce'); ?></h1>
 	<form action="" method="post">
 		<?php wp_nonce_field('phplugins-carts-settings-save', 'phplugins_carts_settings_save'); ?>
-		
+
 		<h2><?php esc_html_e('Frontend', 'live-carts-for-woocommerce'); ?></h2>
 		<p>
 			<label>
@@ -55,7 +55,7 @@ class AdminPage {
 			</label>
 			<p class="description"><?php esc_html_e('Note: It may be necessary to refresh the page after adding the first item to cart to see the cart ID.', 'live-carts-for-woocommerce'); ?></p>
 		</p>
-		
+
 		<h2><?php esc_html_e('Privacy', 'live-carts-for-woocommerce'); ?></h2>
 		<p>
 			<label>
@@ -69,7 +69,7 @@ class AdminPage {
 				<?php esc_html_e('Don\'t collect visited URLs', 'live-carts-for-woocommerce'); ?>
 			</label>
 		</p>
-		
+
 		<h2><?php esc_html_e('Advanced', 'live-carts-for-woocommerce'); ?></h2>
 		<p>
 			<label>
@@ -77,7 +77,7 @@ class AdminPage {
 				<?php esc_html_e('Enable debug mode', 'live-carts-for-woocommerce'); ?>
 			</label>
 		</p>
-		
+
 		<button class="button-primary"><?php esc_html_e('Save Settings', 'live-carts-for-woocommerce'); ?></button>
 	</form>
 </div>
@@ -87,7 +87,7 @@ class AdminPage {
 	public function cartPage() {
 		$tsFormat = LiveCarts::instance()->getTimestampFormat();
 		$statuses = LiveCarts::instance()->getCartStatuses();
-		
+
 		if (!empty($this->cartData)) {
 			if (!empty($this->cartData->user_id)) {
 				$user = get_userdata($this->cartData->user_id);
@@ -185,6 +185,26 @@ class AdminPage {
 							</td>
 						</tr>
 						<?php } ?>
+						<?php if ($this->cartData->email) { ?>
+                            <tr>
+                                <th scope="row">
+                                    <label><?php esc_html_e('Email:', 'live-carts-for-woocommerce'); ?></label>
+                                </th>
+                                <td>
+									<?php echo( esc_html($this->cartData->email) ); ?>
+                                </td>
+                            </tr>
+						<?php } ?>
+						<?php if ($this->cartData->user_agent) { ?>
+                            <tr>
+                                <th scope="row">
+                                    <label><?php esc_html_e('User Agent:', 'live-carts-for-woocommerce'); ?></label>
+                                </th>
+                                <td>
+									<?php echo( esc_html($this->cartData->user_agent) ); ?>
+                                </td>
+                            </tr>
+						<?php } ?>
 						<?php if ($this->cartData->coupon) { ?>
 						<tr>
 							<th scope="row">
@@ -203,9 +223,9 @@ class AdminPage {
 								<?php echo( wc_price($this->cartData->value) ); ?>
 							</td>
 						</tr>
-						
+
 						<?php do_action('phplugins_live_carts_admin_cart_details', $this->cartData->cart_id); ?>
-						
+
 						<?php if (isset($contents)) { ?>
 						<tr>
 							<th scope="row">
