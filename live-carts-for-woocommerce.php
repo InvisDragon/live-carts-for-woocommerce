@@ -20,6 +20,9 @@ class LiveCarts {
 		'GoogleBot',
 		'Bingbot',
 		'YandexBot',
+		'GoogleOther',
+		'DotBot',
+		'AhrefsBot',
 	];
 
 	private $currentCart, $currentCartId;
